@@ -1,6 +1,5 @@
 import Document, { IDocument, IDocumentChange } from '../models/Document';
 
-// 📝 Input types for document operations
 export interface CreateDocumentInput {
   title: string;
   ownerId: string;
@@ -25,7 +24,6 @@ export interface DocumentResponse {
 
 export class DocumentService {
   
-  // 📝 Create a new document
   async createDocument(data: CreateDocumentInput): Promise<DocumentResponse> {
     try {
       const document = new Document({
@@ -73,7 +71,6 @@ export class DocumentService {
         };
       }
 
-      // Check if user can view this document
       if (!document.canUserView(userId)) {
         return {
           success: false,
@@ -81,7 +78,6 @@ export class DocumentService {
         };
       }
 
-      // Update user activity
       await document.updateUserActivity(userId);
 
       return {
@@ -98,19 +94,17 @@ export class DocumentService {
     }
   }
 
-  // 📚 Get user's documents
   async getUserDocuments(userId: string): Promise<DocumentResponse> {
     try {
-      // Find documents where user is owner or collaborator
       const documents = await Document.find({
         $or: [
           { ownerId: userId },
           { 'collaborators.userId': userId }
         ]
       })
-      .sort({ lastModified: -1 }) // Most recently modified first
+      .sort({ lastModified: -1 })
       .select('title ownerId ownerName lastModified createdAt isPublic collaborators activeUsers')
-      .limit(50); // Limit to 50 documents
+      .limit(50); 
 
       return {
         success: true,
