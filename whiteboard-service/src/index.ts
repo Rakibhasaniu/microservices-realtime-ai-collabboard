@@ -1,22 +1,69 @@
 import { env } from './config/env';
 import connectDB from './config/database';
 import RedisConfig from './config/redis';
+import { createSocketServer } from './sockets/socketServer';
+import express from 'express';
 
 async function startWhiteboardService() {
   try {
+    console.log('🎨 Starting Whiteboard Service...');
+    console.log(`📋 Service: ${env.SERVICE_NAME}`);
+    console.log(`🌍 Environment: ${env.NODE_ENV}`);
+    console.log(`🔌 Port: ${env.PORT}`);
+    
+    // Step 1: Connect to databases
     await connectDB();
-    console.log('✅ MongoDB connected for Whiteboard Service');
+    console.log('✅ MongoDB connected');
     
     const redis = RedisConfig.getInstance();
     await redis.connect();
+    console.log('✅ Redis connected');
     
-    // Test Redis connections
-    const redisClient = redis.getClient();
-    await redisClient.set('whiteboard-test', 'Hello Socket.io!');
-    const testValue = await redisClient.get('whiteboard-test');
-    console.log('🧪 Redis test result:', testValue);
-    
+    // Step 2: Create Socket.io server
+    const { app, httpServer, io } = createSocketServer();
+    console.log('✅ Socket.io server created');
+    app.use(express.static('src/public'));
 
+  
+    
+  app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/test-client.html');
+});
+
+app.get('/test', (req, res) => {
+  res.sendFile(__dirname + '/public/test-client.html');
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    service: 'whiteboard-service',
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+    
+    // Step 4: Start HTTP server
+    httpServer.listen(env.PORT, () => {
+      console.log(`✅ Server running on port ${env.PORT}`);
+      console.log(`🌐 HTTP: http://localhost:${env.PORT}`);
+      console.log(`🔌 Socket.io: ws://localhost:${env.PORT}`);
+      console.log('🎉 Whiteboard Service ready for real-time collaboration!');
+    });
+    
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      httpServer.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    });
+    
+    process.on('SIGINT', () => {
+      httpServer.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+      });
+    });
     
   } catch (error) {
     console.error('💥 Startup failed:', error);

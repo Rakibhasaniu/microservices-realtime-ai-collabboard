@@ -40,9 +40,6 @@ export class DocumentSocketHandlers {
         await socket.join(`document:${documentId}`);
         socket.data.currentDocument = documentId;
 
-        // Add user to active users in database
-        await this.documentService.joinDocument(documentId, userId);
-
         // Create socket user object
         const socketUser: SocketUser = {
           userId,

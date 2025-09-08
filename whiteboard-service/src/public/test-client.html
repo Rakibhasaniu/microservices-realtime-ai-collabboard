@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Whiteboard Service Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        textarea { width: 100%; height: 200px; font-family: monospace; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .online-users { margin: 10px 0; padding: 10px; background: #f8f9fa; }
+        .message { margin: 5px 0; padding: 5px; background: #e9ecef; }
+        input[type="text"] { padding: 8px; margin: 5px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Whiteboard Service Test Client</h1>
+        
+        <div id="status" class="status info">Not connected</div>
+        
+        <div>
+            <h3>🔐 Authentication</h3>
+            <input type="text" id="tokenInput" placeholder="JWT Token from Auth Service" style="width: 70%;">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+        </div>
+        
+        <div>
+            <h3>📄 Document Operations</h3>
+            <input type="text" id="documentId" placeholder="Document ID" value="test-doc-123">
+            <button onclick="joinDocument()">Join Document</button>
+            <button onclick="leaveDocument()">Leave Document</button>
+        </div>
+        
+        <div>
+            <h3>✏️ Text Editing</h3>
+            <textarea id="documentContent" placeholder="Document content will appear here..."></textarea>
+            <br>
+            <button onclick="insertText()">Insert "Hello " at position 0</button>
+            <button onclick="deleteText()">Delete 5 chars at position 0</button>
+            <button onclick="syncTextarea()">Send Current Text to Document</button>
+        </div>
+        
+        <div>
+            <h3>👥 Online Users</h3>
+            <div id="onlineUsers" class="online-users">No users online</div>
+        </div>
+        
+        <div>
+            <h3>💬 Real-time Messages</h3>
+            <div id="messages" style="height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; background: white;"></div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket = null;
+        let currentDocumentId = null;
+        
+        function addMessage(message, type = 'info') {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#6c757d';
+            
+            div.innerHTML = `<span style="color: ${color}; font-weight: bold;">${timestamp}:</span> ${message}`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        function connect() {
+            const token = document.getElementById('tokenInput').value.trim();
+            
+            if (!token) {
+                alert('Please enter a JWT token first');
+                return;
+            }
+            
+            updateStatus('Connecting...', 'info');
+            addMessage('🔌 Attempting to connect...');
+            
+            socket = io('http://localhost:3002', {
+                auth: {
+                    token: token
+                }
+            });
+            
+            socket.on('connect', () => {
+                updateStatus('✅ Connected successfully!', 'success');
+                addMessage('✅ Connected to Whiteboard Service', 'success');
+            });
+            
+            socket.on('disconnect', () => {
+                updateStatus('❌ Disconnected', 'error');
+                addMessage('❌ Disconnected from server', 'error');
+                currentDocumentId = null;
+            });
+            
+            socket.on('connect_error', (error) => {
+                updateStatus(`❌ Connection failed: ${error.message}`, 'error');
+                addMessage(`❌ Connection error: ${error.message}`, 'error');
+            });
+            
+            // Document events
+            socket.on('user-joined', (user) => {
+                addMessage(`👋 ${user.userName} joined the document`, 'success');
+            });
+            
+            socket.on('user-left', (userId) => {
+                addMessage(`👋 User ${userId} left the document`);
+            });
+            
+            socket.on('users-online', (users) => {
+                displayOnlineUsers(users);
+                addMessage(`👥 ${users.length} users online`);
+            });
+            
+            socket.on('document-updated', (operation) => {
+                addMessage(`📝 Document updated: ${operation.type} "${operation.content || ''}" at position ${operation.position}`);
+                applyOperationToTextarea(operation);
+            });
+            
+            socket.on('cursor-moved', (cursor) => {
+                addMessage(`👆 ${cursor.userName} moved cursor to position ${cursor.position}`);
+            });
+            
+            socket.on('user-typing', (userId, userName) => {
+                addMessage(`⌨️ ${userName} is typing...`);
+            });
+            
+            socket.on('error', (message) => {
+                addMessage(`❌ Error: ${message}`, 'error');
+            });
+            
+            socket.on('permission-denied', (message) => {
+                addMessage(`🚫 Permission denied: ${message}`, 'error');
+            });
+        }
+        
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                currentDocumentId = null;
+                updateStatus('Disconnected', 'error');
+                addMessage('🔌 Manually disconnected');
+            }
+        }
+        
+        function joinDocument() {
+            if (!socket) {
+                alert('Please connect first');
+                return;
+            }
+            
+            // ✅ FIXED: Use correct element ID
+            const documentId = document.getElementById('documentId').value.trim();
+            if (!documentId) {
+                alert('Please enter a document ID');
+                return;
+            }
+            
+            addMessage(`🔄 Joining document: ${documentId}...`);
+            
+            socket.emit('join-document', documentId, (response) => {
+                if (response.success) {
+                    currentDocumentId = documentId;
+                    addMessage(`✅ Joined document: ${documentId}`, 'success');
+                    if (response.document) {
+                        document.getElementById('documentContent').value = response.document.content;
+                        addMessage(`📄 Document loaded: "${response.document.title}"`);
+                    }
+                } else {
+                    addMessage(`❌ Failed to join document: ${response.message}`, 'error');
+                }
+            });
+        }
+        
+        function leaveDocument() {
+            if (!socket || !currentDocumentId) {
+                alert('Not in a document');
+                return;
+            }
+            
+            socket.emit('leave-document', currentDocumentId);
+            const docId = currentDocumentId;
+            currentDocumentId = null;
+            addMessage(`🚪 Left document: ${docId}`);
+            document.getElementById('documentContent').value = '';
+            document.getElementById('onlineUsers').textContent = 'No users online';
+        }
+        
+        function insertText() {
+            if (!socket || !currentDocumentId) {
+                alert('Please join a document first');
+                return;
+            }
+            
+            const operation = {
+                type: 'insert',
+                position: 0,
+                content: 'Hello ',
+                userId: 'test-user',
+                userName: 'Test User',
+                timestamp: Date.now()
+            };
+            
+            addMessage(`📝 Sending insert operation...`);
+            socket.emit('text-operation', currentDocumentId, operation);
+        }
+        
+        function deleteText() {
+            if (!socket || !currentDocumentId) {
+                alert('Please join a document first');
+                return;
+            }
+            
+            const operation = {
+                type: 'delete',
+                position: 0,
+                length: 5,
+                userId: 'test-user',
+                userName: 'Test User',
+                timestamp: Date.now()
+            };
+            
+            addMessage(`🗑️ Sending delete operation...`);
+            socket.emit('text-operation', currentDocumentId, operation);
+        }
+        
+        function syncTextarea() {
+            if (!socket || !currentDocumentId) {
+                alert('Please join a document first');
+                return;
+            }
+            
+            const content = document.getElementById('documentContent').value;
+            const operation = {
+                type: 'replace',
+                position: 0,
+                content: content,
+                userId: 'test-user',
+                userName: 'Test User',
+                timestamp: Date.now()
+            };
+            
+            addMessage(`🔄 Syncing textarea content...`);
+            socket.emit('text-operation', currentDocumentId, operation);
+        }
+        
+        function displayOnlineUsers(users) {
+            const container = document.getElementById('onlineUsers');
+            if (users.length === 0) {
+                container.textContent = 'No users online';
+            } else {
+                container.innerHTML = users.map(user => 
+                    `<span style="margin-right: 10px; padding: 2px 8px; background: #007bff; color: white; border-radius: 3px;">
+                        ${user.userName}
+                    </span>`
+                ).join('');
+            }
+        }
+        
+        function applyOperationToTextarea(operation) {
+            const textarea = document.getElementById('documentContent');
+            let content = textarea.value;
+            
+            switch (operation.type) {
+                case 'insert':
+                    content = content.slice(0, operation.position) + 
+                             (operation.content || '') + 
+                             content.slice(operation.position);
+                    break;
+                case 'delete':
+                    content = content.slice(0, operation.position) + 
+                             content.slice(operation.position + (operation.length || 0));
+                    break;
+                case 'replace':
+                    content = operation.content || '';
+                    break;
+            }
+            
+            textarea.value = content;
+        }
+        
+        // Add real-time textarea sync
+        document.getElementById('documentContent').addEventListener('input', function(e) {
+            if (socket && currentDocumentId) {
+                // Emit typing indicator
+                socket.emit('user-typing', currentDocumentId);
+            }
+        });
+    </script>
+</body>
+</html>
