@@ -9,10 +9,16 @@
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["socket.io", "real-time", "collaboration", "whiteboard"],
+  "keywords": [
+    "socket.io",
+    "real-time",
+    "collaboration",
+    "whiteboard"
+  ],
   "author": "Rakib hasan",
   "license": "ISC",
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",

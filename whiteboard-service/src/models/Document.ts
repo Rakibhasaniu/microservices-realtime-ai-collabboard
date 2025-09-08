@@ -83,7 +83,7 @@ const DocumentSchema: Schema<IDocument> = new Schema({
   ownerId: {
     type: String,
     required: [true, 'Owner ID is required'],
-    index: true
+    // index: true
   },
   
   ownerName: {

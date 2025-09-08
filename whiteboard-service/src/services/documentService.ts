@@ -14,7 +14,6 @@ export interface UpdateDocumentInput {
   isPublic?: boolean;
 }
 
-// 📤 Response types
 export interface DocumentResponse {
   success: boolean;
   message: string;
@@ -26,6 +25,7 @@ export class DocumentService {
   
   async createDocument(data: CreateDocumentInput): Promise<DocumentResponse> {
     try {
+      
       const document = new Document({
         title: data.title,
         content: data.content || '',
@@ -35,7 +35,7 @@ export class DocumentService {
         collaborators: [{
           userId: data.ownerId,
           userName: data.ownerName,
-          userEmail: '', // Will be filled from auth service
+          userEmail: 'test@example.com', // Add a test email
           role: 'owner',
           joinedAt: new Date(),
           lastActive: new Date()
@@ -43,7 +43,9 @@ export class DocumentService {
         lastModified: new Date()
       });
 
+      
       const savedDocument = await document.save();
+      
 
       return {
         success: true,
@@ -52,16 +54,17 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Document creation error:', error);
       return {
         success: false,
-        message: 'Failed to create document'
+        message: `Failed to create document: ${error}`
       };
     }
   }
 
-  // 📖 Get document by ID
   async getDocument(documentId: string, userId: string): Promise<DocumentResponse> {
     try {
+      
       const document = await Document.findById(documentId);
 
       if (!document) {
@@ -71,6 +74,7 @@ export class DocumentService {
         };
       }
 
+      // Check if user can view this document
       if (!document.canUserView(userId)) {
         return {
           success: false,
@@ -78,6 +82,7 @@ export class DocumentService {
         };
       }
 
+      // Update user activity
       await document.updateUserActivity(userId);
 
       return {
@@ -87,6 +92,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Get document error:', error);
       return {
         success: false,
         message: 'Failed to retrieve document'
@@ -104,7 +110,7 @@ export class DocumentService {
       })
       .sort({ lastModified: -1 })
       .select('title ownerId ownerName lastModified createdAt isPublic collaborators activeUsers')
-      .limit(50); 
+      .limit(50);
 
       return {
         success: true,
@@ -113,6 +119,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Get user documents error:', error);
       return {
         success: false,
         message: 'Failed to retrieve documents'
@@ -120,7 +127,6 @@ export class DocumentService {
     }
   }
 
-  // ✏️ Update document content and metadata
   async updateDocument(documentId: string, userId: string, updates: UpdateDocumentInput): Promise<DocumentResponse> {
     try {
       const document = await Document.findById(documentId);
@@ -132,7 +138,6 @@ export class DocumentService {
         };
       }
 
-      // Check if user can edit
       if (!document.canUserEdit(userId)) {
         return {
           success: false,
@@ -140,7 +145,6 @@ export class DocumentService {
         };
       }
 
-      // Update fields
       if (updates.title) document.title = updates.title;
       if (updates.content !== undefined) document.content = updates.content;
       if (updates.isPublic !== undefined) document.isPublic = updates.isPublic;
@@ -157,6 +161,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Update document error:', error);
       return {
         success: false,
         message: 'Failed to update document'
@@ -164,7 +169,6 @@ export class DocumentService {
     }
   }
 
-  // 🗑️ Delete document
   async deleteDocument(documentId: string, userId: string): Promise<DocumentResponse> {
     try {
       const document = await Document.findById(documentId);
@@ -176,7 +180,6 @@ export class DocumentService {
         };
       }
 
-      // Only owner can delete
       if (document.ownerId !== userId) {
         return {
           success: false,
@@ -192,6 +195,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Delete document error:', error);
       return {
         success: false,
         message: 'Failed to delete document'
@@ -199,7 +203,6 @@ export class DocumentService {
     }
   }
 
-  // 👥 Add collaborator to document
   async addCollaborator(documentId: string, ownerId: string, collaboratorData: {
     userId: string;
     userName: string;
@@ -216,7 +219,6 @@ export class DocumentService {
         };
       }
 
-      // Only owner can add collaborators
       if (document.ownerId !== ownerId) {
         return {
           success: false,
@@ -238,6 +240,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Add collaborator error:', error);
       return {
         success: false,
         message: 'Failed to add collaborator'
@@ -245,7 +248,6 @@ export class DocumentService {
     }
   }
 
-  // 🚪 Join/Leave document (for real-time presence)
   async joinDocument(documentId: string, userId: string): Promise<DocumentResponse> {
     try {
       const document = await Document.findById(documentId);
@@ -257,7 +259,6 @@ export class DocumentService {
         };
       }
 
-      // Add user to active users if not already there
       if (!document.activeUsers.includes(userId)) {
         document.activeUsers.push(userId);
         await document.save();
@@ -270,6 +271,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Join document error:', error);
       return {
         success: false,
         message: 'Failed to join document'
@@ -288,7 +290,6 @@ export class DocumentService {
         };
       }
 
-      // Remove user from active users and cursors
       document.activeUsers = document.activeUsers.filter(id => id !== userId);
       document.cursors = document.cursors.filter(cursor => cursor.userId !== userId);
       
@@ -300,6 +301,7 @@ export class DocumentService {
       };
 
     } catch (error) {
+      console.error('🔧 DEBUG: Leave document error:', error);
       return {
         success: false,
         message: 'Failed to leave document'
