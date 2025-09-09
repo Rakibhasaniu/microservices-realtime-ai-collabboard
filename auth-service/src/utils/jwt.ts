@@ -17,7 +17,7 @@ export const jwtUtils = {
       payload,
       env.JWT_SECRET as string,
       {
-        expiresIn: '24',
+        expiresIn: '24h',
         issuer: 'collabboard-auth-service',
         audience: 'collabboard-users'
       }
