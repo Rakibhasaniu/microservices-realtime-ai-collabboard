@@ -1,189 +1,125 @@
+// src/index.ts
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import RedisConfig from './config/redis';
+import documentRoutes from './routes/documentRoutes';
 import { env } from './config/env';
 import connectDB from './config/database';
-import RedisConfig from './config/redis';
 import { createSocketServer } from './sockets/socketServer';
-import express from 'express';
 
-async function startWhiteboardService() {
+async function startServer() {
   try {
-    console.log('🎨 Starting Whiteboard Service...');
-    console.log(`📋 Service: ${env.SERVICE_NAME}`);
-    console.log(`🌍 Environment: ${env.NODE_ENV}`);
-    console.log(`🔌 Port: ${env.PORT}`);
-    
-    // Step 1: Connect to databases
+    console.log('🚀 Starting Whiteboard Service...');
+
+    // Initialize Redis connections
+    console.log('📡 Connecting to Redis...');
+    const redisConfig = RedisConfig.getInstance();
+    await redisConfig.connect();
+
+    // Connect to MongoDB
+    console.log('📡 Connecting to MongoDB...');
     await connectDB();
-    console.log('✅ MongoDB connected');
-    
-    const redis = RedisConfig.getInstance();
-    await redis.connect();
-    console.log('✅ Redis connected');
-    
-    // Step 2: Create Socket.io server
+
+    // Create Express app and Socket.io server
     const { app, httpServer, io } = createSocketServer();
-    console.log('✅ Socket.io server created');
-    app.use(express.static('src/public'));
 
-  
-    
-  app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/test-client.html');
-});
+    // Middleware
+    app.use(helmet());
+    app.use(cors({
+      origin: env.CORS_ORIGINS,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization']
+    }));
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ extended: true }));
 
-app.get('/test', (req, res) => {
-  res.sendFile(__dirname + '/public/test-client.html');
-});
+    // Routes
+    app.use('/documents', documentRoutes);
 
-app.get('/health', (req, res) => {
-  res.json({
-    service: 'whiteboard-service',
-    status: 'healthy',
-    timestamp: new Date().toISOString()
-  });
-});
-    
-    // Step 4: Start HTTP server
+    // Root endpoint
+    app.get('/', (req, res) => {
+      res.json({
+        service: 'CollabBoard Whiteboard Service',
+        version: '1.0.0',
+        status: 'running',
+        features: {
+          'Document Management': '/documents',
+          'Real-time Collaboration': 'Socket.io',
+          'User Authentication': 'JWT',
+          'Data Storage': 'MongoDB',
+          'Caching & Pub/Sub': 'Redis'
+        },
+        endpoints: {
+          'GET /': 'Service information',
+          'GET /documents/health': 'Health check',
+          'POST /documents': 'Create document',
+          'GET /documents': 'Get user documents',
+          'GET /documents/:id': 'Get document by ID',
+          'PUT /documents/:id': 'Update document',
+          'DELETE /documents/:id': 'Delete document',
+          'POST /documents/:id/collaborators': 'Add collaborator'
+        },
+        socketEvents: {
+          'join-document': 'Join document room',
+          'leave-document': 'Leave document room',
+          'text-operation': 'Apply text changes',
+          'cursor-update': 'Update cursor position',
+          'user-typing': 'Typing indicators'
+        }
+      });
+    });
+
+   
+
+    // Error handler
+    app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+      console.error('❌ Unhandled error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        ...(env.NODE_ENV === 'development' && { error: error.message })
+      });
+    });
+
+    // Start server
     httpServer.listen(env.PORT, () => {
-      console.log(`✅ Server running on port ${env.PORT}`);
-      console.log(`🌐 HTTP: http://localhost:${env.PORT}`);
-      console.log(`🔌 Socket.io: ws://localhost:${env.PORT}`);
-      console.log('🎉 Whiteboard Service ready for real-time collaboration!');
+      console.log('\n🎉 Whiteboard Service Started Successfully!');
+      console.log(`📍 HTTP Server: http://localhost:${env.PORT}`);
+      console.log(`🔌 Socket.io Server: ws://localhost:${env.PORT}`);
+      console.log(`🌍 Environment: ${env.NODE_ENV}`);
+      console.log(`📊 MongoDB: Connected`);
+      console.log(`⚡ Redis: Connected`);
+      console.log('\n📋 Available Endpoints:');
+      console.log(`  🏥 Health: GET http://localhost:${env.PORT}/documents/health`);
+      console.log(`  📄 Documents: POST/GET/PUT/DELETE http://localhost:${env.PORT}/documents`);
+      console.log(`  🤝 Collaboration: Socket.io events`);
+      console.log('\n✅ Service ready for requests!');
     });
-    
+
     // Graceful shutdown
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
+      console.log('\n📴 Received SIGTERM, shutting down gracefully...');
       httpServer.close(() => {
-        console.log('Server closed');
+        console.log('🔌 HTTP server closed');
         process.exit(0);
       });
     });
-    
-    process.on('SIGINT', () => {
+
+    process.on('SIGINT', async () => {
+      console.log('\n📴 Received SIGINT, shutting down gracefully...');
       httpServer.close(() => {
-        console.log('Server closed');
+        console.log('🔌 HTTP server closed');
         process.exit(0);
       });
     });
-    
+
   } catch (error) {
-    console.error('💥 Startup failed:', error);
+    console.error('❌ Failed to start Whiteboard Service:', error);
     process.exit(1);
   }
 }
 
-startWhiteboardService();
-
-// import { env } from './config/env';
-// import connectDB from './config/database';
-// import RedisConfig from './config/redis';
-// import { DocumentService } from './services/documentService';
-
-// async function testDocumentModel() {
-//   console.log('\n🧪 Testing Document Model...');
-  
-//   const documentService = new DocumentService();
-  
-//   try {
-//     // Test 1: Create a document
-//     console.log('\n📝 Test 1: Creating document...');
-//     const createResult = await documentService.createDocument({
-//       title: 'My First Collaborative Doc',
-//       ownerId: 'user123',
-//       ownerName: 'John Doe',
-//       content: 'Hello, this is a collaborative document!',
-//       isPublic: false
-//     });
-    
-//     console.log('✅ Create result:', {
-//       success: createResult.success,
-//       message: createResult.message,
-//       documentId: createResult.document?._id
-//     });
-    
-//     if (createResult.success && createResult.document) {
-//       const docId = String(createResult.document._id);
-      
-//       // Test 2: Get the document
-//       console.log('\n📖 Test 2: Getting document...');
-//       const getResult = await documentService.getDocument(docId, 'user123');
-//       console.log('✅ Get result:', {
-//         success: getResult.success,
-//         title: getResult.document?.title,
-//         content: getResult.document?.content?.substring(0, 30) + '...',
-//         collaborators: getResult.document?.collaborators.length
-//       });
-      
-//       // Test 3: Add collaborator
-//       console.log('\n👥 Test 3: Adding collaborator...');
-//       const addCollabResult = await documentService.addCollaborator(docId, 'user123', {
-//         userId: 'user456',
-//         userName: 'Jane Smith',
-//         userEmail: 'jane@example.com',
-//         role: 'editor'
-//       });
-//       console.log('✅ Add collaborator result:', {
-//         success: addCollabResult.success,
-//         collaborators: addCollabResult.document?.collaborators.length
-//       });
-      
-//       // Test 4: Join document (simulate real-time)
-//       console.log('\n🚪 Test 4: Joining document...');
-//       const joinResult = await documentService.joinDocument(docId, 'user456');
-//       console.log('✅ Join result:', {
-//         success: joinResult.success,
-//         activeUsers: joinResult.document?.activeUsers.length
-//       });
-      
-//       // Test 5: Get user's documents
-//       console.log('\n📚 Test 5: Getting user documents...');
-//       const userDocsResult = await documentService.getUserDocuments('user123');
-//       console.log('✅ User docs result:', {
-//         success: userDocsResult.success,
-//         count: userDocsResult.documents?.length
-//       });
-      
-//       // Test 6: Update document
-//       console.log('\n✏️ Test 6: Updating document...');
-//       const updateResult = await documentService.updateDocument(docId, 'user123', {
-//         content: 'Hello, this is an UPDATED collaborative document! Real-time editing works!'
-//       });
-//       console.log('✅ Update result:', {
-//         success: updateResult.success,
-//         version: updateResult.document?.version
-//       });
-//     }
-    
-//     console.log('\n🎉 All document model tests completed!');
-    
-//   } catch (error) {
-//     console.error('❌ Document model test failed:', error);
-//   }
-// }
-
-// async function startWhiteboardService() {
-//   try {
-//     console.log('🎨 Starting Whiteboard Service...');
-//     console.log(`📋 Service: ${env.SERVICE_NAME}`);
-//     console.log(`🌍 Environment: ${env.NODE_ENV}`);
-//     console.log(`🔌 Port: ${env.PORT}`);
-    
-//     // Connect to databases
-//     await connectDB();
-//     console.log('✅ MongoDB connected for Whiteboard Service');
-    
-//     const redis = RedisConfig.getInstance();
-//     await redis.connect();
-//     console.log('✅ Redis connections established');
-    
-//     // Test our document model
-//     await testDocumentModel();
-    
-//     console.log('\n📚 Next: We will add Socket.io server for real-time features!');
-    
-//   } catch (error) {
-//     console.error('💥 Startup failed:', error);
-//     process.exit(1);
-//   }
-// }
-
-// startWhiteboardService();
+// Start the server
+startServer();
